@@ -21,6 +21,8 @@
 #include <pybind11/stl.h>
 #include <poppler-image.h>
 #include <poppler-rectangle.h>
+#include <pybind11/detail/common.h>
+#include <array>
 
 namespace py = pybind11;
 
@@ -44,14 +46,19 @@ py::buffer_info image_buffer_info(image &img)
 {
     py::ssize_t bytes_per_color = img.bytes_per_row() / img.width();
 
-    return py::buffer_info(
+    const std::array<ssize_t, 3> shape_in   = {static_cast<py::ssize_t>(img.height()), static_cast<py::ssize_t>(img.width()), bytes_per_color};
+    const std::array<ssize_t, 3> strides_in = {static_cast<py::ssize_t>(img.bytes_per_row()), bytes_per_color, 1L};
+
+    py::buffer_info ret = py::buffer_info(
         static_cast<void*>(img.data()),
         1L,
         py::format_descriptor<char>::format(),
         3L,
-        { static_cast<py::ssize_t>(img.height()), static_cast<py::ssize_t>(img.width()), bytes_per_color },
-        { static_cast<py::ssize_t>(img.bytes_per_row()), bytes_per_color, 1L }
+        shape_in,
+        strides_in
     );
+
+    return ret;
 }
 
 py::str format_to_str(image::format_enum format)
