@@ -15,6 +15,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+import sys
 import pytest
 
 from poppler.page import Page
@@ -57,7 +58,13 @@ def test_page_rect_box(pdf_page, box):
 
 def test_text(pdf_page):
     text = pdf_page.text()
-    expected = "Page 1" if version() < (0, 88, 0) else "Page 1\n\x0c"
+
+    if sys.platform == "win32":
+        other = "Page 1\r\n\x0c"
+    else:
+        other = "Page 1\n\x0c"
+
+    expected = "Page 1" if version() < (0, 88, 0) else other
     assert text == expected
 
 
