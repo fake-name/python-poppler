@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import shutil
 from pathlib import Path
 import platform
 import subprocess
@@ -73,6 +74,98 @@ class CMakeBuild(build_ext):
         )
 
 
+binary_deps = []
+
+# These are pulled from conda-forge
+# Conda seems to split up dependencies everywhere, which is annoying.
+# poppler needs DLLs from following packages to work:
+#   - poppler
+#   - libiconv
+#   - freetype
+#   - zlib
+#   - libcurl
+#   - openjpeg
+#   - libpng
+#   - libtiff
+#   - libssh2
+#   - zstd
+#   - xz
+#   - openssl
+binary_search_paths = [
+    'C:\\code\\lib\\poppler-0.90.1-h5d62644_0\\Library\\bin',
+    'C:\\code\\lib\\libiconv-1.15-h0c8e037_1006\\Library\\bin',
+    'C:\\code\\lib\\freetype-2.10.2-hd328e21_0\\Library\\bin',
+    'C:\\code\\lib\\zlib-1.2.11-h3cc03e0_1006\\Library\\bin',
+    'C:\\code\\lib\\libcurl-7.71.1-h4b64cdc_4\\Library\\bin',
+    'C:\\code\\lib\\openjpeg-2.3.1-h57dd2e7_3\\Library\\bin',
+    'C:\\code\\lib\\libpng-1.6.37-hfe6a214_1\\Library\\bin',
+    'C:\\code\\lib\\libtiff-4.1.0-h885aae3_6\\Library\\bin',
+    'C:\\code\\lib\\libssh2-1.9.0-hb06d900_5\\Library\\bin',
+    'C:\\code\\lib\\zstd-1.4.5-h1f3a1b7_2\\Library\\bin',
+    'C:\\code\\lib\\xz-5.2.5-h62dcd97_1\\Library\\bin',
+    'C:\\code\\lib\\openssl-1.1.1g-he774522_1\\Library\\bin',
+]
+
+
+def locate_dll(dll_name):
+    '''
+    Locate a dll `dll_name` in the available `binary_search_paths`, and
+    return a relative path to the target DLL from the current working directory.
+
+    A dll not being found will raise an exception.
+    '''
+    for spath in binary_search_paths:
+        files = os.listdir(spath)
+        if dll_name in files:
+            return os.path.relpath(os.path.join(spath, dll_name))
+
+    raise IOError("Could not find required DLL '%s'" % (dll_name))
+
+def locate_rename_file(old_name, new_name):
+    '''
+    Locate a dll `dll_name` in the available `binary_search_paths`, and
+    copy it to the same directory as `new_name`.
+
+    A dll not being found will raise an exception.
+    '''
+
+    for spath in binary_search_paths:
+        files = os.listdir(spath)
+        if old_name in files:
+            if os.path.exists(os.path.join(spath, new_name)):
+                return
+            shutil.copy(os.path.join(spath, old_name), os.path.join(spath, new_name))
+            return
+
+    raise IOError("Could not find required DLL to copy '%s'" % (dll_name))
+
+
+if sys.platform == "win32":
+
+    # I haven't tracked down why this is distributed as "libiconv.dll", but
+    # linked as "iconv.dll". Anyways, make a copy of it with the name we expect.
+    # This requires the lcoation where the DLL is located to be writable
+    locate_rename_file("libiconv.dll", "iconv.dll")
+
+    binary_deps.append(('poppler/cpp', [
+        locate_dll('poppler-cpp.dll'),
+        locate_dll('poppler.dll'),
+        locate_dll('iconv.dll'),
+        locate_dll('libcharset.dll'),
+        locate_dll('freetype.dll'),
+        locate_dll('zlib.dll'),
+        locate_dll('libcurl.dll'),
+        locate_dll('openjp2.dll'),
+        locate_dll('libpng16.dll'),
+        locate_dll('tiff.dll'),
+        locate_dll('libssh2.dll'),
+        locate_dll('liblzma.dll'),
+        locate_dll('zstd.dll'),
+        locate_dll('libcrypto-1_1-x64.dll'),
+        ]))
+    print("Binary deps: ", binary_deps)
+
+
 setup(
     name="python-poppler",
     version=__version__,  # noqa
@@ -97,7 +190,10 @@ setup(
     },
     python_requires=">=3.7",
     packages=find_packages("src"),
-    package_dir={"": "src"},
+    package_dir={
+            "": "src",
+        },
+    data_files=binary_deps,
     include_package_data=True,
     ext_modules=[CMakeExtension("poppler.cpp.modules")],
     cmdclass=dict(build_ext=CMakeBuild),
